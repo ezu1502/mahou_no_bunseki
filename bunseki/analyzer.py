@@ -1,5 +1,11 @@
 from pathlib import Path
 import librosa
+import numpy as np
+from bunseki.bunseki_colors import painted_string
+import logging
+
+log = logging.getLogger("mahou.bunseki.analyzer")
+logging.getLogger("numba").setLevel(logging.WARNING)
 
 class Analyzer:
     def __init__(self, path: str | Path) -> None:
@@ -20,8 +26,9 @@ class Analyzer:
         
 
     def load_song(self, path: Path):
-        self.audio, self.sample_rate = librosa.load(path)
-
+        log.debug("Loading song...")
+        self.audio, self.sample_rate = librosa.load(path, sr = None)
+        log.debug("Loaded!")
         #Audio é a lista com todas as amostras
         #Sample rate é a frequencia de amostras de som em amostras/segundo
 
@@ -52,7 +59,15 @@ class Analyzer:
         return self.path.suffix.lower()
     
     @property
-    def RMS_volume(self):
+    def peak_amplitude(self):
+        peak = np.max(np.abs(self.audio))
+        if peak > 1:
+            log.info(f"Peak amplitude is greater than 1: {peak}")
+        return peak
+    
+
+    @property
+    def RMS_volume_total(self):
         amplitude = abs(self.audio)
 
         squared_amplitude = amplitude**2
@@ -63,9 +78,54 @@ class Analyzer:
 
         return mean_amplitude
 
+    
+    def slicer_rms_list_maker(self, audio, window_size = 512):
+        #window_size é o tamanho da janela de cada amostra
+        self.rms_list: list = []
+        step = window_size // 2
+        for i in range(0, len(audio), step):
+            chunk = audio[i:i+window_size]
+            chunk_squared = chunk ** 2
+            chunk_squared_mean = np.mean(chunk_squared) 
+            chunk_rms = np.sqrt(chunk_squared_mean)
+            self.rms_list.append(chunk_rms)
+            return self.rms_list
+        
+    @property
+    def get_rms_list(self):
+        return self.slicer_rms_list_maker(self.audio, window_size = 512)
+
+
+    def fourier(self, audio, window_size):
+        fourier_list: list = []
+        freqs = np.fft.rfftfreq(window_size, d = 1/self.sample_rate)
+
+        step = window_size // 2
+        for eachslice in range(0, len(audio), step):
+            window_index = eachslice // step
+
+            time_in_seconds = (window_index * step) / self.sample_rate
+
+            chunk = audio[eachslice:eachslice+window_size]
+            result = np.fft.rfft(chunk)
+
+            for index, value in enumerate(result):
+                magnitude = np.abs(value)
+                fourier_list.append((time_in_seconds, freqs[index], magnitude))
+        return fourier_list
+
+    @property
+    def get_fourier_spectrum(self):
+        return self.fourier(self.audio, window_size = 1024)
+                
+            
+
+
+
+
     @property
     def desvio_padrão(self):
-        amplitude = abs(self.audio)
+        amplitude = self.audio
         mean_amplitude = amplitude.mean()
 
         diff_squared_sum = 0
@@ -78,17 +138,34 @@ class Analyzer:
         variancia = diff_squared_sum/len(self.audio)
 
         return variancia**1/2
-
+    
+    @property
+    def RMS_dbfs_amplitude(self):
+        return 20 * np.log10(self.RMS_volume_total)
+    
+    @property
+    def RMS_dbfs_power(self):
+        return 10 * np.log10(self.RMS_volume_total)
+    
     
     def see_all_info(self) -> str:
-        return (
-            f"Title: {self.title}"
+        basic_info = (
+            f"BASIC INFO:"
+            f"\nTitle: {self.title}"
             f"\nFormat:{self.file_format}"
             f"\nDuration: {self.base60_duration[0]}min, {self.base60_duration[1]:02d}s"
             f"\nPath: {self.file_path}"
-
-            f"\nRMS volume: {self.RMS_volume}"
             )
+        
+        more_info = (
+            f"MORE INFO:"
+            f"\nRMS volume: {self.RMS_volume_total}"
+            f"\nPeak amplitude: {self.peak_amplitude}"
+            f"\nSample rate: {self.sample_rate}Hz"
+            f"\nAverage dBFS: {self.RMS_dbfs_amplitude}"
+        )
+
+        return f"{basic_info}\n\n{more_info}"
     
 
 
