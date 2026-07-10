@@ -29,7 +29,7 @@ path = ask_file()
 
 analysis = Analyzer(path)
 
-analysis.show_list(analysis.get_fourier_spectrum)
+analysis.show_list(analysis.properties.get_fourier_spectrum)
 
 
 def test_freq_to_note():

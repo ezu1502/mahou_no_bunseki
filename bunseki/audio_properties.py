@@ -4,11 +4,13 @@ import logging
 log = logging.getLogger("mahou.bunseki.analyzer.properties")
 logging.getLogger("numba").setLevel(logging.WARNING)
 
-class Properties:
+class AudioProperties:
     def __init__(self, audio, sample_rate) -> None:
         self.audio = audio
         self.sample_rate = sample_rate
     
+#region METRICS
+
     @property
     def duration(self):
         #retorna o número de segundos da música
@@ -22,8 +24,6 @@ class Properties:
         display_seconds = int(seconds % 60)
         
         return (minutes, display_seconds)
-    
-    
     
     @property
     def peak_amplitude(self):
@@ -72,6 +72,37 @@ class Properties:
         return self.slicer_rms_list_maker(self.audio, window_size = 512)
     
     @property
+    def standard_deviation(self):
+        amplitude = self.audio
+        mean_amplitude = amplitude.mean()
+
+        diff_squared_sum = 0
+
+        for sample in self.audio:
+            diff = sample - mean_amplitude
+            diff_squared = diff**2
+            diff_squared_sum += diff_squared
+        
+        variancia = diff_squared_sum/len(self.audio)
+
+        return variancia**(1/2) 
+    
+    @property
+    def rms_dbfs_amplitude(self):
+        if self.rms_volume_total == 0:
+            return -np.inf
+
+        return self.turn_into_dBFS(self.rms_volume_total)
+    
+    def turn_into_time(self, number):
+        minutes = int(number // 60)
+        seconds = number % 60
+        return f"{minutes}:{seconds:05.2f}"
+#endregion
+
+    #region SPECTRUM
+
+    @property
     def get_fourier_spectrum(self):
         return self.fourier(self.audio, window_size = 1024, top_n_freqs = 10)[:2]
     
@@ -104,30 +135,6 @@ class Properties:
                 fourier_list.append((self.turn_into_time(time_in_seconds), freqs[index], magnitudes[index]))
         return fourier_list
     
-    def turn_into_time(self, number):
-        minutes = int(number // 60)
-        seconds = number % 60
-        return f"{minutes}:{seconds:05.2f}"
-                
-    @property
-    def standard_deviation(self):
-        amplitude = self.audio
-        mean_amplitude = amplitude.mean()
 
-        diff_squared_sum = 0
-
-        for sample in self.audio:
-            diff = sample - mean_amplitude
-            diff_squared = diff**2
-            diff_squared_sum += diff_squared
-        
-        variancia = diff_squared_sum/len(self.audio)
-
-        return variancia**(1/2) 
+    #endregion
     
-    @property
-    def rms_dbfs_amplitude(self):
-        if self.rms_volume_total == 0:
-            return -np.inf
-
-        return self.turn_into_dBFS(self.rms_volume_total)
