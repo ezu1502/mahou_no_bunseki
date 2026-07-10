@@ -22,7 +22,7 @@ class Analyzer:
         if self.path.suffix.lower() not in allowed_suffixes:
             raise ValueError(f"Unsupported file format: {self.path.suffix} in {self.path}")
         
-        self.load_song(self.path)
+        # self.load_song(self.path)
         
 
     def load_song(self, path: Path):
@@ -89,14 +89,15 @@ class Analyzer:
             chunk_squared_mean = np.mean(chunk_squared) 
             chunk_rms = np.sqrt(chunk_squared_mean)
             self.rms_list.append(chunk_rms)
-            return self.rms_list
+        return self.rms_list
         
     @property
     def get_rms_list(self):
         return self.slicer_rms_list_maker(self.audio, window_size = 512)
 
-
-    def fourier(self, audio, window_size):
+    
+    def fourier(self, audio, window_size, top_n_freqs):
+        log.debug("Loading fourier list...")
         fourier_list: list = []
         freqs = np.fft.rfftfreq(window_size, d = 1/self.sample_rate)
 
@@ -107,16 +108,33 @@ class Analyzer:
             time_in_seconds = (window_index * step) / self.sample_rate
 
             chunk = audio[eachslice:eachslice+window_size]
+            if len(chunk) < window_size:
+                continue
             result = np.fft.rfft(chunk)
+            magnitudes = np.abs(result)
+            top10_indexes = np.argsort(magnitudes)[-top_n_freqs:]
 
-            for index, value in enumerate(result):
-                magnitude = np.abs(value)
-                fourier_list.append((time_in_seconds, freqs[index], magnitude))
+            for index in top10_indexes:
+                if magnitudes[index] < 1e-6:
+                    continue
+                fourier_list.append((self.turn_into_seconds(time_in_seconds), freqs[index], magnitudes[index]))
         return fourier_list
+    
+    def turn_into_seconds(self, number):
+        minutes = int(number // 60)
+        seconds = number % 60
+        return f"{minutes}:{seconds:05.2f}"
+
+
+
+
+    def show_list(self, list):
+        for item in list:
+            print(item)
 
     @property
-    def get_fourier_spectrum(self):
-        return self.fourier(self.audio, window_size = 1024)
+    def get_fourier_spectrum(self, index = 2):
+        return self.fourier(self.audio, window_size = 1024, top_n_freqs = 10)[:index]
                 
             
 
@@ -141,13 +159,39 @@ class Analyzer:
     
     @property
     def RMS_dbfs_amplitude(self):
+        if self.RMS_volume_total == 0:
+            return -np.inf
+
         return 20 * np.log10(self.RMS_volume_total)
     
-    @property
-    def RMS_dbfs_power(self):
-        return 10 * np.log10(self.RMS_volume_total)
+    def freq_to_note(self, freq):
+        if freq <= 0:
+            return "N/A"
+        a440 = 69
+        delta = 12 * np.log2(freq/440)
+
+        note_number = a440 + delta
+        note_number = round(note_number)
+
+        octave = (note_number // 12) - 1
+        note = note_number % 12
+
+        notes_names = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
+        
+        final_note = f"{notes_names[note]}{octave}"
+
+        return final_note
     
-    
+
+
+        # 2**1/12 * (freq)
+
+        
+
+
+
+
+
     def see_all_info(self) -> str:
         basic_info = (
             f"BASIC INFO:"
