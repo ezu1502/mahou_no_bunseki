@@ -31,5 +31,15 @@ analysis = Analyzer(path)
 
 analysis.show_list(analysis.get_fourier_spectrum)
 
+
+def test_freq_to_note():
+    for i in range (1, 12):
+
+        factor = 440*(2**((1/12)*i))
+        note = analysis.freq_to_note(factor)
+        print(note)
+
+
+
 print(f"\n{analysis.see_all_info()}")
 print()
