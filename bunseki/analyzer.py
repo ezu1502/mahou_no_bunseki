@@ -55,10 +55,6 @@ class Analyzer:
         return (minutes, display_seconds)
     
     
-    
-    
-
-
     def show_list(self, list):
         for item in list:
             print(item)

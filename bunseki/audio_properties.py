@@ -1,5 +1,6 @@
 import numpy as np
 import logging
+import mahou_math
 
 log = logging.getLogger("mahou.bunseki.analyzer.properties")
 logging.getLogger("numba").setLevel(logging.WARNING)
@@ -55,6 +56,18 @@ class AudioProperties:
 
         return mean_amplitude
 
+
+    def get_rms(self, sample_list):
+        amplitude = np.abs(sample_list)
+
+        squared_amplitude = amplitude**2
+
+        mean_squared_amplitude = squared_amplitude.mean()
+
+        mean_amplitude = mean_squared_amplitude**(1/2)
+
+        return mean_amplitude
+
     def slicer_rms_list_maker(self, audio, window_size = 512):
         #window_size é o tamanho da janela de cada amostra
         rms_list: list = []
@@ -67,9 +80,57 @@ class AudioProperties:
             rms_list.append(chunk_rms)
         return rms_list
     
+    
+    
+
+
+
+
+
+
     @property
     def get_rms_list(self):
         return self.slicer_rms_list_maker(self.audio, window_size = 512)
+    
+    
+    def get_beats(self, window_size = 512):
+        beats = []
+        step = window_size // 2
+        audio_rms = self.get_rms_list
+        for i in range(1, len(self.get_rms_list)-1):
+            
+            previous_chunk = audio_rms[i-1]
+            previous_chunk_rms = self.get_rms(previous_chunk)
+
+            chunk = audio_rms[i]
+            chunk_rms = self.get_rms(chunk)
+
+            next_chunk = audio_rms[i+1]
+            next_chunk_rms = self.get_rms(next_chunk)
+            
+            
+
+            if (chunk_rms - previous_chunk_rms) > 0 and (chunk_rms - next_chunk_rms) > 0:
+
+                chunk_prominence = ((chunk_rms - previous_chunk_rms) + (chunk_rms - next_chunk_rms)) / 2
+                surrounding_rms = mahou_math.mean(previous_chunk_rms, next_chunk_rms)
+
+                if chunk_rms > audio_rms and chunk_prominence > (1.5*previous_chunk_rms):
+                    if chunk_rms > 1.5*surrounding_rms:
+                        time_in_seconds = (i*step) / self.sample_rate
+                        beats.append((chunk, time_in_seconds))
+        return beats
+
+    def get_estimated_bpm(self):
+        beats_list = self.get_beats()
+
+        differences = []
+        for i in range(0, len(beats_list)):
+            time_between_beats = beats_list[i-1][1] - beats_list[i][1] 
+            differences.append(time_between_beats)
+        
+        return np.mean(differences)
+
     
     @property
     def standard_deviation(self):
@@ -104,7 +165,7 @@ class AudioProperties:
 
     @property
     def get_fourier_spectrum(self):
-        return self.fourier(self.audio, window_size = 1024, top_n_freqs = 10)[:2]
+        return self.fourier(self.audio, window_size = 1024, top_n_freqs = 10)
     
     def fourier(self, audio, window_size, top_n_freqs):
         log.debug("Loading fourier list...")
