@@ -99,26 +99,37 @@ class AudioProperties:
         audio_rms = self.get_rms_list
         for i in range(1, len(self.get_rms_list)-1):
             
-            previous_chunk = audio_rms[i-1]
-            previous_chunk_rms = self.get_rms(previous_chunk)
-
-            chunk = audio_rms[i]
-            chunk_rms = self.get_rms(chunk)
-
-            next_chunk = audio_rms[i+1]
-            next_chunk_rms = self.get_rms(next_chunk)
-            
+            previous_rms = audio_rms[i-1]
+            rms = audio_rms[i]
+            next_rms = audio_rms[i+1]
             
 
-            if (chunk_rms - previous_chunk_rms) > 0 and (chunk_rms - next_chunk_rms) > 0:
+            is_peak = ((rms > previous_rms) and (rms > next_rms))
 
-                chunk_prominence = ((chunk_rms - previous_chunk_rms) + (chunk_rms - next_chunk_rms)) / 2
-                surrounding_rms = mahou_math.mean(previous_chunk_rms, next_chunk_rms)
+            if is_peak:
 
-                if chunk_rms > audio_rms and chunk_prominence > (1.5*previous_chunk_rms):
-                    if chunk_rms > 1.5*surrounding_rms:
-                        time_in_seconds = (i*step) / self.sample_rate
-                        beats.append((chunk, time_in_seconds))
+                chunk_prominence = ((rms - previous_rms) + (rms - next_rms)) / 2
+                surrounding_rms = mahou_math.mean(previous_rms, next_rms)
+
+                is_significant_peak = (
+                rms > audio_rms and
+                chunk_prominence > (1.5*previous_rms) and
+                rms > 1.5*surrounding_rms
+                )
+
+                if is_significant_peak:
+                    time_in_seconds = (i*step) / self.sample_rate
+                    beats.append((rms, time_in_seconds))
+
+        for i in range(0, len(beats), 2):
+            second_beat = beats[i+1]
+            first_beat = beats[i]
+            if (second_beat[1] - first_beat[1]) < 0.15:
+                if(first_beat[0] > second_beat[0]):
+                    beats.remove(second_beat)
+                elif(first_beat[0] < second_beat[0]):
+                    beats.remove(first_beat)
+
         return beats
 
     def get_estimated_bpm(self):
@@ -128,25 +139,15 @@ class AudioProperties:
         for i in range(0, len(beats_list)):
             time_between_beats = beats_list[i-1][1] - beats_list[i][1] 
             differences.append(time_between_beats)
-        
-        return np.mean(differences)
+            mean_differences = np.mean(differences)
+        return 
 
     
     @property
     def standard_deviation(self):
         amplitude = self.audio
-        mean_amplitude = amplitude.mean()
+        return mahou_math.standard_deviation(*amplitude)
 
-        diff_squared_sum = 0
-
-        for sample in self.audio:
-            diff = sample - mean_amplitude
-            diff_squared = diff**2
-            diff_squared_sum += diff_squared
-        
-        variancia = diff_squared_sum/len(self.audio)
-
-        return variancia**(1/2) 
     
     @property
     def rms_dbfs_amplitude(self):
