@@ -1,6 +1,6 @@
 import numpy as np
 import logging
-import mahou_math
+from mahou_libs import mahou_math
 
 log = logging.getLogger("mahou.bunseki.analyzer.properties")
 logging.getLogger("numba").setLevel(logging.WARNING)
@@ -46,15 +46,9 @@ class AudioProperties:
 
     @property
     def rms_volume_total(self):
-        amplitude = np.abs(self.audio)
+        amplitude = self.audio
 
-        squared_amplitude = amplitude**2
-
-        mean_squared_amplitude = squared_amplitude.mean()
-
-        mean_amplitude = mean_squared_amplitude**(1/2)
-
-        return mean_amplitude
+        return self.get_rms(amplitude)
 
 
     def get_rms(self, sample_list):
@@ -74,9 +68,10 @@ class AudioProperties:
         step = window_size // 2
         for i in range(0, len(audio), step):
             chunk = audio[i:i+window_size]
-            chunk_squared = chunk ** 2
-            chunk_squared_mean = np.mean(chunk_squared) 
-            chunk_rms = np.sqrt(chunk_squared_mean)
+
+            if len(chunk) < window_size:
+                continue
+            chunk_rms = self.get_rms(chunk)
             rms_list.append(chunk_rms)
         return rms_list
     
@@ -89,15 +84,20 @@ class AudioProperties:
 
 
     @property
-    def get_rms_list(self):
+    def rms_list(self):
         return self.slicer_rms_list_maker(self.audio, window_size = 512)
     
     
     def get_beats(self, window_size = 512):
         beats = []
         step = window_size // 2
-        audio_rms = self.get_rms_list
-        for i in range(1, len(self.get_rms_list)-1):
+        audio_rms = self.slicer_rms_list_maker(
+            self.audio,
+            window_size = window_size
+        )
+
+        rms_mean = np.mean(audio_rms)
+        for i in range(1, len(audio_rms)-1):
             
             previous_rms = audio_rms[i-1]
             rms = audio_rms[i]
@@ -112,41 +112,49 @@ class AudioProperties:
                 surrounding_rms = mahou_math.mean(previous_rms, next_rms)
 
                 is_significant_peak = (
-                rms > audio_rms and
-                chunk_prominence > (1.5*previous_rms) and
-                rms > 1.5*surrounding_rms
+                rms > 1.5 * rms_mean and
+                chunk_prominence > 0.15*surrounding_rms and
+                rms > 1.2 *surrounding_rms
                 )
 
                 if is_significant_peak:
                     time_in_seconds = (i*step) / self.sample_rate
                     beats.append((rms, time_in_seconds))
 
-        for i in range(0, len(beats), 2):
-            second_beat = beats[i+1]
-            first_beat = beats[i]
-            if (second_beat[1] - first_beat[1]) < 0.15:
-                if(first_beat[0] > second_beat[0]):
-                    beats.remove(second_beat)
-                elif(first_beat[0] < second_beat[0]):
-                    beats.remove(first_beat)
+        
+        filtered_beats = []
+        for beat in beats:
+            if not filtered_beats:
+                filtered_beats.append(beat)
+                continue
 
-        return beats
+            previous_beat = filtered_beats[-1]
+            time_difference = beat[1] - previous_beat[1]
 
-    def get_estimated_bpm(self):
+            if time_difference < 0.15:
+                if beat[0] > previous_beat[0]:
+                    filtered_beats[-1] = beat
+
+            else:
+                filtered_beats.append(beat)
+            
+
+        return filtered_beats
+
+    @property
+    def estimated_bpm(self):
+
         beats_list = self.get_beats()
 
-        differences = []
-        for i in range(0, len(beats_list)):
-            time_between_beats = beats_list[i-1][1] - beats_list[i][1] 
-            differences.append(time_between_beats)
-            mean_differences = np.mean(differences)
-        return 
+        if len(beats_list) < 2:
+            return None
 
-    
-    @property
-    def standard_deviation(self):
-        amplitude = self.audio
-        return mahou_math.standard_deviation(*amplitude)
+        differences = []
+        for i in range(1, len(beats_list)):
+            time_between_beats = beats_list[i][1] - beats_list[i-1][1] 
+            differences.append(time_between_beats)
+            
+        return 60 / np.median(differences)
 
     
     @property
@@ -165,7 +173,7 @@ class AudioProperties:
     #region SPECTRUM
 
     @property
-    def get_fourier_spectrum(self):
+    def fourier_spectrum(self):
         return self.fourier(self.audio, window_size = 1024, top_n_freqs = 10)
     
     def fourier(self, audio, window_size, top_n_freqs):
@@ -174,6 +182,7 @@ class AudioProperties:
         freqs = np.fft.rfftfreq(window_size, d = 1/self.sample_rate)
 
         step = window_size // 2
+        window = np.hanning(window_size)
         for eachslice in range(0, len(audio), step):
             window_index = eachslice // step
 
@@ -183,7 +192,7 @@ class AudioProperties:
             if len(chunk) < window_size:
                 continue
 
-            window = np.hanning(window_size)
+            
             windowed_chunk = chunk * window
 
             result = np.fft.rfft(windowed_chunk)

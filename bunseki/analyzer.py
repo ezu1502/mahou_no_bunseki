@@ -1,7 +1,7 @@
 from pathlib import Path
 import librosa
 import numpy as np
-from bunseki.bunseki_colors import painted_string
+from mahou_libs import COLORS, painted_string
 import logging
 from bunseki.audio_properties import AudioProperties
 from bunseki.analyzer_info import AnalysisInfo
@@ -100,6 +100,7 @@ class Analyzer:
             f"\nPeak amplitude: {self.properties.peak_amplitude}"
             f"\nSample rate: {self.properties.sample_rate}Hz"
             f"\nAverage dBFS: {self.properties.rms_dbfs_amplitude}"
+            f"\nEstimated BPM: {self.properties.estimated_bpm}"
         )
 
         return f"{basic_info}\n\n{more_info}"
