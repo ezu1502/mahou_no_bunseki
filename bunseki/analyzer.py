@@ -3,19 +3,29 @@ import librosa
 import numpy as np
 from mahou_libs import COLORS, painted_string
 import logging
-from bunseki.audio_properties import AudioProperties
-from bunseki.analyzer_info import AnalysisInfo
+from .audio_properties import AudioProperties
+from .analyzer_info import AnalysisInfo
 
 log = logging.getLogger("mahou.bunseki.analyzer")
 logging.getLogger("numba").setLevel(logging.WARNING)
 
+
+#region Main Methods
 class Analyzer:
     def __init__(self, path: str | Path) -> None:
         self.path = Path(path)
 
+        self.check_path_valid()
+        
+        self.info = AnalysisInfo(self.path)
+
+        self.properties_loaded: bool = False
+
+        log.debug("song analyzer initialized")
+        
+    def check_path_valid(self):
         if not self.path.exists():
             raise FileNotFoundError(f"File not found: {self.path}")
-        
         if not self.path.is_file():
             raise IsADirectoryError(f"Invalid path, not a file: {self.path}")
         
@@ -24,27 +34,19 @@ class Analyzer:
         if self.path.suffix.lower() not in allowed_suffixes:
             raise ValueError(f"Unsupported file format: {self.path.suffix} in {self.path}")
         
-        self.load_song(self.path)
-
-        self.info = AnalysisInfo(self.path)
-        # self.metrics = 
-        self.properties = AudioProperties(self.audio, self.sample_rate)
-        
-        
-
-    def load_song(self, path: Path):
-        log.debug("Loading song...")
-        self.audio, self.sample_rate = librosa.load(path, sr = None)
-        log.debug("Loaded!")
-        #Audio é a lista com todas as amostras
-        #Sample rate é a frequencia de amostras de som em amostras/segundo
+        log.debug("analyzer's path is valid!")
 
 
+    def load_properties(self):
+        self.properties = AudioProperties(self.path)
+        if self.properties:
+            self.properties_loaded = True
+            log.debug("audio properties loaded")
+#endregion
+#region BASICS (no loading)
     @property
     def duration(self):
-        #retorna o número de segundos da música
-        seconds = len(self.audio) / self.sample_rate
-        return seconds
+        return self.info.librosa_duration
     
     @property
     def base60_duration(self):
@@ -54,13 +56,9 @@ class Analyzer:
         
         return (minutes, display_seconds)
     
-    
     def show_list(self, list):
         for item in list:
             print(item)
-
-   
-
     
     def freq_to_note(self, freq):
         if freq <= 0:
@@ -79,13 +77,16 @@ class Analyzer:
         final_note = f"{notes_names[note]}{octave}"
 
         return final_note
-    
-
-
         # 2**1/12 * (freq)
 
+#endregion
 
+    #region Needs Loading
+ 
     def see_all_info(self) -> str:
+        if not self.properties_loaded:
+            self.load_properties()
+
         basic_info = (
             f"BASIC INFO:"
             f"\nTitle: {self.info.title}"
@@ -100,10 +101,22 @@ class Analyzer:
             f"\nPeak amplitude: {self.properties.peak_amplitude}"
             f"\nSample rate: {self.properties.sample_rate}Hz"
             f"\nAverage dBFS: {self.properties.rms_dbfs_amplitude}"
-            f"\nEstimated BPM: {self.properties.estimated_bpm}"
         )
 
         return f"{basic_info}\n\n{more_info}"
-    
+
+
+    def get_analysis_dictionary(self):
+        if not self.properties_loaded:
+            raise RuntimeError("self.properties has not been loaded yet!")
+        dictionary = {
+            "title": self.info.title,
+            "path": str(self.info.file_path),
+            "format": self.info.file_format,
+            "duration_seconds": self.properties.duration,
+            "duration_base60": self.properties.base60_duration,
+            "peak_dbfs": self.properties.peak_dbfs         
+        }
+        return dictionary
 
 

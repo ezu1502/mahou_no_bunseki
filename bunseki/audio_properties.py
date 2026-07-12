@@ -1,15 +1,38 @@
 import numpy as np
 import logging
 from mahou_libs import mahou_math
+import librosa
+from pathlib import Path
+from functools import wraps
 
 log = logging.getLogger("mahou.bunseki.analyzer.properties")
 logging.getLogger("numba").setLevel(logging.WARNING)
 
+
+def check_audio_exists(function):
+        @wraps(function)
+        def wrapper(self, *args, **kwargs):
+            if self.audio:
+                return function(*args, **kwargs)
+            else:
+                raise RuntimeError("self.audio does not exist!!")
+        return wrapper
+
 class AudioProperties:
-    def __init__(self, audio, sample_rate) -> None:
-        self.audio = audio
-        self.sample_rate = sample_rate
+    def __init__(self, path) -> None:
+        self.path = path
+        self.load_song(path)
     
+
+    def load_song(self, path: Path):
+        if self.audio is None:
+            log.debug("Loading song...")
+            self.audio, self.sample_rate = librosa.load(path, sr = None)
+            log.debug("Loaded! -> self.audio and self.sample created")
+
+        #Audio é a lista com todas as amostras
+        #Sample rate é a frequencia de amostras de som em amostras/segundo
+
 #region METRICS
 
     @property
@@ -35,14 +58,12 @@ class AudioProperties:
     
     @property
     def peak_dbfs(self):
-
         return self.turn_into_dBFS(self.peak_amplitude)
     
     def turn_into_dBFS(self, amplitude):
         if amplitude <= 0:
             return -np.inf
         return 20 * np.log10(amplitude)
-
 
     @property
     def rms_volume_total(self):
@@ -75,19 +96,24 @@ class AudioProperties:
             rms_list.append(chunk_rms)
         return rms_list
     
+    @property
+    def rms_dbfs_amplitude(self):
+        if self.rms_volume_total == 0:
+            return -np.inf
+
+        return self.turn_into_dBFS(self.rms_volume_total)
     
-    
-
-
-
-
-
+    def turn_into_time(self, number):
+        minutes = int(number // 60)
+        seconds = number % 60
+        return f"{minutes}:{seconds:05.2f}"
 
     @property
     def rms_list(self):
         return self.slicer_rms_list_maker(self.audio, window_size = 512)
     
     
+
     def get_beats(self, window_size = 512):
         beats = []
         step = window_size // 2
@@ -157,55 +183,11 @@ class AudioProperties:
         return 60 / np.median(differences)
 
     
-    @property
-    def rms_dbfs_amplitude(self):
-        if self.rms_volume_total == 0:
-            return -np.inf
-
-        return self.turn_into_dBFS(self.rms_volume_total)
     
-    def turn_into_time(self, number):
-        minutes = int(number // 60)
-        seconds = number % 60
-        return f"{minutes}:{seconds:05.2f}"
 #endregion
 
     #region SPECTRUM
 
-    @property
-    def fourier_spectrum(self):
-        return self.fourier(self.audio, window_size = 1024, top_n_freqs = 10)
-    
-    def fourier(self, audio, window_size, top_n_freqs):
-        log.debug("Loading fourier list...")
-        fourier_list: list = []
-        freqs = np.fft.rfftfreq(window_size, d = 1/self.sample_rate)
-
-        step = window_size // 2
-        window = np.hanning(window_size)
-        for eachslice in range(0, len(audio), step):
-            window_index = eachslice // step
-
-            time_in_seconds = (window_index * step) / self.sample_rate
-
-            chunk = audio[eachslice:eachslice+window_size]
-            if len(chunk) < window_size:
-                continue
-
-            
-            windowed_chunk = chunk * window
-
-            result = np.fft.rfft(windowed_chunk)
-            magnitudes = np.abs(result)
-            magnitudes[0] = 0
-            top_indexes = np.argsort(magnitudes)[-top_n_freqs:][::-1]
-
-            for index in top_indexes:
-                if magnitudes[index] < 1e-6:
-                    continue
-                fourier_list.append((self.turn_into_time(time_in_seconds), freqs[index], magnitudes[index]))
-        return fourier_list
-    
 
     #endregion
     

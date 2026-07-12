@@ -43,5 +43,5 @@ def test_freq_to_note():
 
 
 
-print(f"\n{analysis.see_all_info()}")
+# print(f"\n{analysis.see_all_info()}")
 print()

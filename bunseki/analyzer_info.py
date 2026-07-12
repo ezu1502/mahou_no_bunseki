@@ -1,4 +1,4 @@
-
+import librosa
 
 class AnalysisInfo:
     def __init__(self, path) -> None:
@@ -15,3 +15,7 @@ class AnalysisInfo:
     @property
     def file_format(self):
         return self.path.suffix.lower()
+    
+    @property
+    def librosa_duration(self):
+        return librosa.get_duration(path = self.path)
