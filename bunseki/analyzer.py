@@ -4,7 +4,7 @@ import numpy as np
 from mahou_libs import COLORS, painted_string
 import logging
 from .audio_properties import AudioProperties
-
+from mutagen import File
 
 log = logging.getLogger("mahou.bunseki.analyzer")
 logging.getLogger("numba").setLevel(logging.WARNING)
@@ -45,8 +45,12 @@ class Analyzer:
     def title(self):
         return self.path.stem
     @property
-    def duration(self):
-        return librosa.get_duration(path = self.path)
+    def duration(self) -> int:
+        audio_file = File(self.path)
+        if audio_file is None or audio_file.info is None:
+            raise ValueError("audio_file could not be read")
+        
+        return audio_file.info.length
     
     @property
     def base60_duration(self):
@@ -55,6 +59,14 @@ class Analyzer:
         display_seconds = int(seconds % 60)
         
         return (minutes, display_seconds)
+    
+    @property
+    def base60_duration_str(self) -> str:
+        seconds = self.duration
+        minutes = int(seconds//60)
+        display_seconds = int(seconds % 60)
+        
+        return f"{minutes}:{display_seconds:02d}"
     
     @property
     def file_format(self):

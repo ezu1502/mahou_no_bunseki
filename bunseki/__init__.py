@@ -1,4 +1,3 @@
-from .analyzer_info import AnalysisInfo
 from .analyzer import Analyzer
 from .audio_properties import AudioProperties 
 
