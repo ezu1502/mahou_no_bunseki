@@ -4,7 +4,7 @@ import numpy as np
 from mahou_libs import COLORS, painted_string
 import logging
 from .audio_properties import AudioProperties
-from .analyzer_info import AnalysisInfo
+
 
 log = logging.getLogger("mahou.bunseki.analyzer")
 logging.getLogger("numba").setLevel(logging.WARNING)
@@ -16,9 +16,6 @@ class Analyzer:
         self.path = Path(path)
 
         self.check_path_valid()
-        
-        self.info = AnalysisInfo(self.path)
-
         self.properties_loaded: bool = False
 
         log.debug("song analyzer initialized")
@@ -45,8 +42,11 @@ class Analyzer:
 #endregion
 #region BASICS (no loading)
     @property
+    def title(self):
+        return self.path.stem
+    @property
     def duration(self):
-        return self.info.librosa_duration
+        return librosa.get_duration(path = self.path)
     
     @property
     def base60_duration(self):
@@ -56,6 +56,14 @@ class Analyzer:
         
         return (minutes, display_seconds)
     
+    @property
+    def file_format(self):
+        return self.path.suffix.lower()
+    
+   
+
+#endregion
+#region non-property funcs
     def show_list(self, list):
         for item in list:
             print(item)
@@ -78,10 +86,9 @@ class Analyzer:
 
         return final_note
         # 2**1/12 * (freq)
-
 #endregion
 
-    #region Needs Loading
+#region Needs Loading
  
     def see_all_info(self) -> str:
         if not self.properties_loaded:
@@ -89,10 +96,10 @@ class Analyzer:
 
         basic_info = (
             f"BASIC INFO:"
-            f"\nTitle: {self.info.title}"
-            f"\nFormat:{self.info.file_format}"
+            f"\nTitle: {self.title}"
+            f"\nFormat:{self.file_format}"
             f"\nDuration: {self.base60_duration[0]}min, {self.base60_duration[1]:02d}s"
-            f"\nPath: {self.info.file_path}"
+            f"\nPath: {self.path}"
             )
         
         more_info = (
@@ -110,13 +117,15 @@ class Analyzer:
         if not self.properties_loaded:
             raise RuntimeError("self.properties has not been loaded yet!")
         dictionary = {
-            "title": self.info.title,
-            "path": str(self.info.file_path),
-            "format": self.info.file_format,
-            "duration_seconds": self.properties.duration,
-            "duration_base60": self.properties.base60_duration,
+            "title": self.title,
+            "path": str(self.path),
+            "format": self.file_format,
+            "duration_seconds": self.duration,
+            "duration_base60": self.base60_duration,
             "peak_dbfs": self.properties.peak_dbfs         
         }
         return dictionary
+
+
 
 
