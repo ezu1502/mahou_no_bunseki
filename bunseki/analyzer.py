@@ -1,9 +1,11 @@
 from pathlib import Path
 import numpy as np
 from mahou_libs import COLORS, painted_string
+from mahou_libs.time_functions import log_delta_time
 import logging
 from .audio_properties import AudioProperties
 from mutagen import File
+import time
 
 log = logging.getLogger("mahou.bunseki.analyzer")
 logging.getLogger("numba").setLevel(logging.WARNING)
@@ -11,15 +13,13 @@ logging.getLogger("numba").setLevel(logging.WARNING)
 
 #region Main Methods
 class Analyzer:
+    @log_delta_time
     def __init__(self, path: str | Path) -> None:
         self.path = Path(path)
-
         self.check_path_valid()
-
         self.properties = None
-
-
         log.debug("song analyzer initialized")
+     
         
     def check_path_valid(self):
         if not self.path.exists():
@@ -34,14 +34,13 @@ class Analyzer:
         
         log.debug("analyzer's path is valid!")
 
+    @log_delta_time
     def load_heavy_analysis(self):
         self.properties = AudioProperties(self.path)
         if self.properties:
             log.debug("audio properties loaded")
-
-    @property
-    def heavy_work_done(self):
-        return self.properties is not None
+        else:
+            log.warning("Heavy analysis loading failed")
     
 #endregion
 #region BASICS (no loading)
@@ -139,7 +138,9 @@ class Analyzer:
             "duration_base60": self.base60_duration
             }    
         if self.properties is not None:
-            dictionary["peak_dbfs"] = self.properties.peak_dbfs  
+            dictionary["peak_dbfs"] = self.properties.peak_dbfs 
+        else:
+            log.info("For more info, run load_heavy_analysis!")
         
         return dictionary
 
