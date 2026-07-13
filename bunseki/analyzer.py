@@ -1,5 +1,4 @@
 from pathlib import Path
-import librosa
 import numpy as np
 from mahou_libs import COLORS, painted_string
 import logging
@@ -16,7 +15,9 @@ class Analyzer:
         self.path = Path(path)
 
         self.check_path_valid()
-        self.properties_loaded: bool = False
+
+        self.properties = None
+
 
         log.debug("song analyzer initialized")
         
@@ -33,12 +34,15 @@ class Analyzer:
         
         log.debug("analyzer's path is valid!")
 
-
-    def load_properties(self):
+    def load_heavy_analysis(self):
         self.properties = AudioProperties(self.path)
         if self.properties:
-            self.properties_loaded = True
             log.debug("audio properties loaded")
+
+    @property
+    def heavy_work_done(self):
+        return self.properties is not None
+    
 #endregion
 #region BASICS (no loading)
     @property
@@ -103,39 +107,40 @@ class Analyzer:
 #region Needs Loading
  
     def see_all_info(self) -> str:
-        if not self.properties_loaded:
-            self.load_properties()
-
-        basic_info = (
-            f"BASIC INFO:"
-            f"\nTitle: {self.title}"
-            f"\nFormat:{self.file_format}"
-            f"\nDuration: {self.base60_duration[0]}min, {self.base60_duration[1]:02d}s"
-            f"\nPath: {self.path}"
-            )
+        if self.properties is None:
+            self.load_heavy_analysis()
         
-        more_info = (
-            f"MORE INFO:"
-            f"\nRMS volume: {self.properties.rms_volume_total}"
-            f"\nPeak amplitude: {self.properties.peak_amplitude}"
-            f"\nSample rate: {self.properties.sample_rate}Hz"
-            f"\nAverage dBFS: {self.properties.rms_dbfs_amplitude}"
-        )
+        if self.properties is not None:
+            basic_info = (
+                f"BASIC INFO:"
+                f"\nTitle: {self.title}"
+                f"\nFormat:{self.file_format}"
+                f"\nDuration: {self.base60_duration[0]}min, {self.base60_duration[1]:02d}s"
+                f"\nPath: {self.path}"
+                )
+            
+            more_info = (
+                f"MORE INFO:"
+                f"\nRMS volume: {self.properties.rms_volume_total}"
+                f"\nPeak amplitude: {self.properties.peak_amplitude}"
+                f"\nSample rate: {self.properties.sample_rate}Hz"
+                f"\nAverage dBFS: {self.properties.rms_dbfs_amplitude}"
+            )
 
         return f"{basic_info}\n\n{more_info}"
 
 
     def get_analysis_dictionary(self):
-        if not self.properties_loaded:
-            raise RuntimeError("self.properties has not been loaded yet!")
         dictionary = {
             "title": self.title,
             "path": str(self.path),
             "format": self.file_format,
             "duration_seconds": self.duration,
-            "duration_base60": self.base60_duration,
-            "peak_dbfs": self.properties.peak_dbfs         
-        }
+            "duration_base60": self.base60_duration
+            }    
+        if self.properties is not None:
+            dictionary["peak_dbfs"] = self.properties.peak_dbfs  
+        
         return dictionary
 
 

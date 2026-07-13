@@ -1,9 +1,9 @@
 import numpy as np
 import logging
-from mahou_libs import mahou_math
-import librosa
+from mahou_libs.mahou_math import statistic
 from pathlib import Path
 from functools import wraps
+import soundfile as sf
 
 log = logging.getLogger("mahou.bunseki.analyzer.properties")
 logging.getLogger("numba").setLevel(logging.WARNING)
@@ -21,13 +21,15 @@ def check_audio_exists(function):
 class AudioProperties:
     def __init__(self, path) -> None:
         self.path = path
+        self.audio = None
+        self.sample_rate = None
         self.load_song(path)
     
 
     def load_song(self, path: Path):
         if self.audio is None:
             log.debug("Loading song...")
-            self.audio, self.sample_rate = librosa.load(path, sr = None)
+            self.audio, self.sample_rate = sf.read(path, dtype = "float32")
             log.debug("Loaded! -> self.audio and self.sample created")
 
         #Audio é a lista com todas as amostras
@@ -37,12 +39,17 @@ class AudioProperties:
 
     @property
     def duration(self):
+        if self.audio is None or self.sample_rate is None:
+            return
         #retorna o número de segundos da música
         seconds = len(self.audio) / self.sample_rate
         return seconds
     
     @property
     def base60_duration(self):
+        if self.duration is None:
+            return
+        
         seconds = self.duration
         minutes = int(seconds//60)
         display_seconds = int(seconds % 60)
@@ -51,6 +58,8 @@ class AudioProperties:
     
     @property
     def peak_amplitude(self):
+        if self.audio is None or self.sample_rate is None:
+            return
         peak = np.max(np.abs(self.audio))
         if peak > 1:
             log.info(f"Peak amplitude is greater than 1: {peak}")
@@ -113,74 +122,24 @@ class AudioProperties:
         return self.slicer_rms_list_maker(self.audio, window_size = 512)
     
     
-
-    def get_beats(self, window_size = 512):
-        beats = []
-        step = window_size // 2
-        audio_rms = self.slicer_rms_list_maker(
-            self.audio,
-            window_size = window_size
-        )
-
-        rms_mean = np.mean(audio_rms)
-        for i in range(1, len(audio_rms)-1):
-            
-            previous_rms = audio_rms[i-1]
-            rms = audio_rms[i]
-            next_rms = audio_rms[i+1]
-            
-
-            is_peak = ((rms > previous_rms) and (rms > next_rms))
-
-            if is_peak:
-
-                chunk_prominence = ((rms - previous_rms) + (rms - next_rms)) / 2
-                surrounding_rms = mahou_math.mean(previous_rms, next_rms)
-
-                is_significant_peak = (
-                rms > 1.5 * rms_mean and
-                chunk_prominence > 0.15*surrounding_rms and
-                rms > 1.2 *surrounding_rms
-                )
-
-                if is_significant_peak:
-                    time_in_seconds = (i*step) / self.sample_rate
-                    beats.append((rms, time_in_seconds))
-
-        
-        filtered_beats = []
-        for beat in beats:
-            if not filtered_beats:
-                filtered_beats.append(beat)
-                continue
-
-            previous_beat = filtered_beats[-1]
-            time_difference = beat[1] - previous_beat[1]
-
-            if time_difference < 0.15:
-                if beat[0] > previous_beat[0]:
-                    filtered_beats[-1] = beat
-
-            else:
-                filtered_beats.append(beat)
-            
-
-        return filtered_beats
-
     @property
     def estimated_bpm(self):
+        # beats_list = self.get_beats()
 
-        beats_list = self.get_beats()
+        # if beats_list is None:
+        #     return
 
-        if len(beats_list) < 2:
-            return None
+        # if len(beats_list) < 2:
+        #     return None
 
-        differences = []
-        for i in range(1, len(beats_list)):
-            time_between_beats = beats_list[i][1] - beats_list[i-1][1] 
-            differences.append(time_between_beats)
+        # differences = []
+        # for i in range(1, len(beats_list)):
+        #     time_between_beats = beats_list[i][1] - beats_list[i-1][1] 
+        #     differences.append(time_between_beats)
             
-        return 60 / np.median(differences)
+        # return 60 / np.median(differences)
+        # ? Precisa de um algoritmo de reconhecimento de batidas  ainda
+        return None
 
     
     
